@@ -58,25 +58,29 @@ async function updateHourlyForecast(city, zoneName) {
     if (!forecastData || !forecastData.list) return;
 
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: zoneName });
+    const now = new Date(todayStr);
+    const next24Hours = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 
-    forecastData.list.forEach(item => {
+    const next24HoursData = forecastData.list.filter(item => {
+        const itemDate = new Date(item.dt * 1000);
+        return itemDate >= now && itemDate <= next24Hours;
+    })
+    .sort((a, b) => a.dt - b.dt);
+
+    next24HoursData.forEach(item => {
         const { dt, main: { temp }, weather: [{ id }] } = item;
-
         const dateObj = new Date(dt * 1000);
-        const itemDateStr = dateObj.toLocaleDateString('en-CA', { timeZone: zoneName });
 
-        if (itemDateStr === todayStr) {
-            const hourStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: zoneName });
+        const hourStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: zoneName });
 
-            const forecastHTML = `
-                <div class="hourly-forecast-item">
-                    <h5 class="hourly-forecast-item-hour regular-txt">${hourStr}</h5>
-                    <img src="assets/weather/${getWeatherIcon(id)}" class="hourly-forecast-item-img" />
-                    <h5 class="hourly-forecast-item-temp">${Math.round(temp)}&deg;</h5>
-                </div>
-            `;
-            hourlyforecastItemsContainer.insertAdjacentHTML('beforeend', forecastHTML);
-        }
+        const forecastHTML = `
+            <div class="hourly-forecast-item">
+                <h5 class="hourly-forecast-item-hour regular-txt">${hourStr}</h5>
+                <img src="assets/weather/${getWeatherIcon(id)}" class="hourly-forecast-item-img" />
+                <h5 class="hourly-forecast-item-temp">${Math.round(temp)}&deg;</h5>
+            </div>
+        `;
+        hourlyforecastItemsContainer.insertAdjacentHTML('beforeend', forecastHTML);
     });
 }
 
@@ -90,9 +94,11 @@ async function updateForecastsInfo(city, zoneName) {
 
     const today = new Date();
     const todayStr = today.toLocaleDateString('en-CA', { timeZone: zoneName });
-    const currentHour = today.getHours();
-
-    console.log('Today string:', todayStr); 
+    const currentHour = new Date().toLocaleDateString('en-CA', {
+        hour: '2-digit',
+        hour12: false,
+        timeZone: zoneName
+    })
 
     const forecastsByDate = new Map();
 
@@ -124,9 +130,7 @@ async function updateForecastsInfo(city, zoneName) {
             }
         });
     
-        const isToday = dateStr === todayStr;
-        console.log(`Date: ${dateStr}, IsToday: ${isToday}`);
-        
+        const isToday = dateStr === todayStr;        
         updateForecastItem(bestItem, isToday, zoneName);
         count++;
     }
@@ -170,8 +174,6 @@ function updateForecastItem(weatherData, isToday = false, zoneName) {
     });
 
     const highlightClass = isToday ? 'highlight-today' : '';
-    
-    console.log(`Creating item - Date: ${dateResult}, IsToday: ${isToday}, Class: ${highlightClass}`); 
 
     const forecastItem = `
         <div class="daily-forecast-item ${highlightClass}">
@@ -260,9 +262,13 @@ searchBtn.addEventListener('click', async () => {
         const zoneName = await getZoneNameByCity(city);
         if (zoneName) {
             await updateWeatherInfo(city, zoneName.zoneName, zoneName.gmtOffset);
+            cityInput.value = '';
+            cityInput.blur();
         }
-        cityInput.value = '';
-        cityInput.blur();
+        else {
+            showDisplaySection(notFoundSection);
+            cityInput.blur();
+        }
     }
 });
 
@@ -270,12 +276,18 @@ searchBtn.addEventListener('click', async () => {
 cityInput.addEventListener('keydown', async (event) => {
     if (event.key === 'Enter' && cityInput.value.trim() !== '') {
         const city = cityInput.value.trim();
-        const zoneName = await getZoneNameByCity(city);
-        if (zoneName) {
-            await updateWeatherInfo(city, zoneName.zoneName, zoneName.gmtOffset);
+        if (city) {
+            const zoneName = await getZoneNameByCity(city);
+            if (zoneName) {
+                await updateWeatherInfo(city, zoneName.zoneName, zoneName.gmtOffset);
+                cityInput.value = '';
+                cityInput.blur();
+            }
+            else {
+                showDisplaySection(notFoundSection);
+                cityInput.blur();
+            }
         }
-        cityInput.value = '';
-        cityInput.blur();
     }
 });
 
@@ -305,17 +317,16 @@ if (navigator.geolocation) {
                 const data = await res.json();
                 await updateWeatherInfo(data.name, zoneName.zoneName, zoneName.gmtOffset);
             } catch (e) {
-                await showDisplaySection(searchCitySection);
+                showDisplaySection(searchCitySection);
             }
             hideLoaderAndShowMain();
         },
-        async () => {
-            await showDisplaySection(searchCitySection);
+        (error) => {
+            showDisplaySection(searchCitySection);
             hideLoaderAndShowMain();
         }
     );
 } else {
-    showDisplaySection(searchCitySection).then(() => {
-        hideLoaderAndShowMain();
-    });
+    showDisplaySection(searchCitySection);
+    hideLoaderAndShowMain();
 }
