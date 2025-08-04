@@ -192,6 +192,7 @@ h6 {
 
 .city-input {
     width: 100%;
+    text-transform: capitalize;
     padding: 10px 43px 10px 16px;
     border-radius: 99px;
     border: 3px solid transparent;
